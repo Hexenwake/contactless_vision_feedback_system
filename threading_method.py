@@ -5,10 +5,26 @@ from module import find_position
 import threading
 from collections import Counter
 import queue
-from datetime import datetime, date
 import time
 from pymouse import PyMouse
 from pykeyboard import PyKeyboard
+
+from covifs_db import RealtimeFirebaseGet
+
+global up_list, period, img_hand_5_path, img_hand_4_path, img_path_array, intro_img
+up_list = []
+period = 10
+img_hand_5_path = "./pictures/five.jpg"
+img_hand_4_path = "./pictures/four.jpg"
+img_path_array = ["./pictures/one.jpg", "./pictures/two.jpg", "./pictures/three.jpg"]
+intro_img = Image.open("intro.png")
+
+global ending_img, resized_ed_img
+ending_img = Image.open("ending.png")
+resized_ed_img = ending_img.resize((500, 430), Image.Resampling.LANCZOS)
+
+global reviews
+reviews = {}
 
 
 def get_hand(frame_resized):
@@ -47,12 +63,6 @@ def get_hand(frame_resized):
         else:
             up = 0
     return up
-
-
-global up_list
-up_list = []
-global period
-period = 10
 
 
 def display_video():
@@ -98,15 +108,15 @@ def process_frame():
 def key_press(final_up):
     if final_up > 0:
         if final_up == 1:
-            keyboard.press_key('1')
+            keyboard.tap_key('1')
         elif final_up == 2:
-            keyboard.press_key('2')
+            keyboard.tap_key('2')
         elif final_up == 3:
-            keyboard.press_key('3')
+            keyboard.tap_key('3')
         elif final_up == 4:
-            keyboard.press_key('4')
+            keyboard.tap_key('4')
         elif final_up == 5:
-            keyboard.press_key('5')
+            keyboard.tap_key('5')
         time.sleep(1.5)
 
 
@@ -117,46 +127,120 @@ def video_capture():
             video_queue.put(frame)
 
 
-def show_question(index):
-    global questions
-    question_label = tk.Label(questions_frame, text="")
-    question_label.pack()
-    current_question = questions[index]
-    question_label.config(text=f"Question {index + 1}: {current_question['question']}")
+def landing_page():
+    destroy_widget()
+    global questions, img_hand_5_path, img_hand_4_path, tk_image_4, tk_image_5, tk_img_array
+    global img_path_array, intro_img, current_index
 
+    upper_frame = tk.Frame(questions_frame, width=500, height=430)
+    upper_frame.grid(row=1, column=1)
+
+    resized = intro_img.resize((500, 430), Image.Resampling.LANCZOS)
+    photo = ImageTk.PhotoImage(resized)
+    label = tk.Label(upper_frame, image=photo)
+    label.image = photo
+    label.grid(row=1, column=1)
+
+    lower_frame = tk.Frame(questions_frame)
+    lower_frame.grid(row=2, column=1)
+
+    next_button = tk.Button(lower_frame, text="Continue", command=lambda i=current_index: show_question(i))
+    tk_image_5 = image_handler(img_hand_5_path)
+    next_button.configure(compound="left", image=tk_image_5)
+    next_button.grid(row=1, column=2, padx=10)
+    window.bind(str(5), lambda e, i=current_index: show_question(i))
+
+
+def show_question(index):
+    destroy_widget()
+    global questions, img_hand_5_path, img_hand_4_path, tk_image_4, tk_image_5, tk_img_array
+    global img_path_array
+    tk_img_array = set_images(img_path_array)
+
+    question_label = tk.Label(questions_frame, text="")
+    question_label.grid(row=0, column=3)
+    question_label.config(text="What would seem to be the problem?")
     i = 0
-    buttons = []
-    for options in questions[index]['options']:
+    for options in questions[index]:
         button = tk.Button(questions_frame, text=options, command=lambda data=options: handle_answer(data))
-        buttons.append(button)
-        button.pack()
+        button.configure(compound="left", image=tk_img_array[i])
+        button.grid(row=i + 2, column=3, padx=10, pady=10)
         window.bind(str(i + 1), lambda e, data=options: handle_answer(data))
         i = i + 1
 
     previous_button = tk.Button(questions_frame, text="Previous", command=previous_question)
-    previous_button.pack(side=tk.BOTTOM, padx=5, pady=10)
+    tk_image_4 = image_handler(img_hand_4_path)
+    previous_button.config(compound="left", image=tk_image_4)
+    previous_button.grid(row=5, column=2, padx=10)
+    window.bind(str(4), lambda e: previous_question())
 
     next_button = tk.Button(questions_frame, text="Next", command=next_question)
-    next_button.pack(side=tk.BOTTOM, padx=5)
+    tk_image_5 = image_handler(img_hand_5_path)
+    next_button.configure(compound="left", image=tk_image_5)
+    next_button.grid(row=5, column=4, padx=10)
+    window.bind(str(5), lambda e: next_question())
+
+
+def ending_page():
+    destroy_widget()
+    global tk_image_5
+    global img_path_array, resized_ed_img, reviews
+
+    upper_frame = tk.Frame(questions_frame, width=500, height=430)
+    upper_frame.grid(row=1, column=1)
+
+    photo = ImageTk.PhotoImage(resized_ed_img)
+    label = tk.Label(upper_frame, image=photo)
+    label.image = photo
+    label.grid(row=1, column=1)
+
+    lower_frame = tk.Frame(questions_frame)
+    lower_frame.grid(row=2, column=1)
+
+    next_button = tk.Button(lower_frame, text="Continue", command=landing_page)
+    tk_image_5 = image_handler(img_hand_5_path)
+    next_button.configure(compound="left", image=tk_image_5)
+    next_button.grid(row=1, column=2, padx=10)
+    window.bind(str(5), lambda e: landing_page())
+    print(reviews)
+    reviews = {}
+
+
+def image_handler(path, width=50, height=50):
+    image = Image.open(path)
+    resized_image = image.resize((width, height))
+    res_img = ImageTk.PhotoImage(resized_image)
+    return res_img
+
+
+def set_images(path_array):
+    res_img = []
+    for path in path_array:
+        res_img.append(image_handler(path))
+    return res_img
 
 
 def handle_answer(answer):
-    print("Selected answer:", answer)
+    global current_index
+    global reviews
+    reviews[current_index] = answer
+    print(f"answer for page {current_index + 1} is {answer}")
 
 
 def next_question():
     global current_index
-    current_index = (current_index + 1) % len(questions)
-
-    destroy_widget()
-    show_question(current_index)
+    if (current_index + 1) == len(questions):
+        current_index = (current_index + 1) % len(questions)
+        print("reaching ending page")
+        ending_page()
+    else:
+        current_index = (current_index + 1) % len(questions)
+        show_question(current_index)
 
 
 def previous_question():
     global current_index
     current_index = (current_index - 1) % len(questions)
-
-    destroy_widget()
     show_question(current_index)
 
 
@@ -170,20 +254,7 @@ global current_index
 current_index = 0
 
 global questions
-questions = [
-    {
-        'question': 'What is the capital of France?',
-        'options': ['London', 'Paris', 'Berlin']
-    },
-    {
-        'question': 'Which country has the largest population?',
-        'options': ['China', 'India', 'United States']
-    },
-    {
-        'question': 'What is the currency of Japan?',
-        'options': ['Yuan', 'Rupee', 'Yen']
-    }
-]
+questions = RealtimeFirebaseGet().get_data()
 
 mouse = PyMouse()
 keyboard = PyKeyboard()
@@ -191,15 +262,16 @@ keyboard = PyKeyboard()
 # Create the main window
 window = tk.Tk()
 window.bind('<Escape>', lambda e: window.quit())
+window.geometry("1000x500")
 
-questions_frame = tk.Frame(window)
-questions_frame.pack(side=tk.LEFT)
-questions_frame.configure(height=500, width=500)
+questions_frame = tk.Frame(window, width=500, height=500, bg="red")
+questions_frame.grid(row=0, column=0)
+questions_frame.grid_propagate(False)
 
-# Create a camera frame
-camera_frame = tk.Label(window)
-camera_frame.pack(side=tk.LEFT)
-camera_frame.configure(width=500, height=500)
+# Create the right frame
+camera_frame = tk.Label(window, width=500, height=500, bg="blue")
+camera_frame.grid(row=0, column=1)
+camera_frame.grid_propagate(False)
 
 # Open the camera
 cap = cv2.VideoCapture(3)
@@ -210,7 +282,7 @@ hand_count_queue = queue.Queue()
 video_thread = threading.Thread(target=display_video)
 processing_thread = threading.Thread(target=process_frame)
 capture_thread = threading.Thread(target=video_capture)
-questions_thread = threading.Thread(target=show_question, args=(current_index,))
+questions_thread = threading.Thread(target=landing_page)
 
 video_thread.start()
 processing_thread.start()
@@ -218,3 +290,5 @@ capture_thread.start()
 questions_thread.start()
 
 window.mainloop()
+cap.release()
+cv2.destroyAllWindows()
